@@ -562,47 +562,50 @@ class ValueNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
   @override
   String toString() => '${describeIdentity(this)}($value)';
 }
-
-/// A [ValueListenable] that computes its value from other listeners.
+/// A [ValueListenable] that computes its value based on other [ValueListenable] instances.
 ///
-/// This notifier listens to a list of other listeners and calls a compute function
-/// whenever any of them change to determine its own value.
-///
-/// The listeners are merged into a single listenable using [Listenable.merge].
+/// The [ComputedNotifier] listens to a list of [ValueListenable]s and computes its own value
+/// using a provided compute function whenever any of them change. It only notifies its listeners
+/// when the computed value actually changes.
 ///
 /// ## Example
 ///
 /// ```dart
 /// final ValueNotifier<int> a = ValueNotifier<int>(1);
 /// final ValueNotifier<int> b = ValueNotifier<int>(2);
+/// final ValueNotifier<int> c = ValueNotifier<int>(3);
 ///
 /// final ComputedNotifier<int> sum = ComputedNotifier<int>(
-///   [a, b],
+///   [a, b, c],
 ///   () => a.value + b.value,
 /// );
 ///
 /// print(sum.value); // 3
 ///
-/// a.value = 2;
+/// a.value = 2; // notify listeners
 /// print(sum.value); // 4
 ///
-/// b.value = 3;
+/// b.value = 3; // notify listeners
+/// print(sum.value); // 5
+///
+/// c.value = 4; // don't notify listeners
 /// print(sum.value); // 5
 ///
 /// sum.dispose();
 /// ```
+///
 /// ## Caveats
 ///
-/// Because this class only notifies listeners when the computed value changes,
-/// it may emit the same value multiple times if the compute function returns
-/// the same value for different inputs.
-///
-/// Additionally, it is important to dispose of the listeners that are passed
-/// to the constructor when they are no longer needed.
+/// - This class only notifies listeners when the computed value changes.
+/// - If the compute function returns the same value for different inputs, listeners will not be notified.
+/// - It is essential to dispose of this notifier and any dependent listeners when they are no longer needed.
 class ComputedNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
-  /// Creates a [ComputedNotifier] that computes its value from the given listeners.
-  ComputedNotifier(this._listenableList, this._compute) {
-    _listenable.addListener(notifyListeners);
+  /// Creates a [ComputedNotifier] that computes its value from the given [ValueListenable]s.
+  ComputedNotifier(List<ValueListenable<dynamic>> listenableList, this._compute)
+      : _currentValue = _compute() {
+    _listenable = Listenable.merge(listenableList);
+    _listenable.addListener(_onDependenciesChanged);
+
     if (kFlutterMemoryAllocationsEnabled) {
       ChangeNotifier.maybeDispatchObjectCreation(this);
     }
@@ -611,20 +614,34 @@ class ComputedNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
   /// The function that computes the value of this notifier.
   final T Function() _compute;
 
-  /// The list of listeners that this notifier depends on.
-  final List<ValueListenable<dynamic>> _listenableList;
+  /// The merged listenable that this notifier depends on.
+  late final Listenable _listenable;
 
-  /// The listenable that this notifier depends on.
-  Listenable get _listenable => Listenable.merge(_listenableList);
+  /// The current value of this notifier.
+  late T _currentValue;
 
-  @override
-  void dispose() {
-    _listenable.removeListener(notifyListeners);
-    super.dispose();
+  /// Determines if the listeners should be notified based on whether the computed value has changed.
+  bool get _shouldNotify {
+    final T newValue = _compute();
+    return newValue != _currentValue;
+  }
+
+  /// Called when any of the dependencies change.
+  void _onDependenciesChanged() {
+    if (_shouldNotify) {
+      _currentValue = _compute();
+      notifyListeners();
+    }
   }
 
   @override
-  T get value => _compute();
+  T get value => _currentValue;
+
+  @override
+  void dispose() {
+    _listenable.removeListener(_onDependenciesChanged);
+    super.dispose();
+  }
 
   @override
   String toString() => '${describeIdentity(this)}($value)';

@@ -642,7 +642,7 @@ void main() {
   });
 
   group('ComputedNotifier', () {
-    test('emits notification for all listenables', () {
+    test('emits notification for all listenable', () {
       final ValueNotifier<int> firstNotifier = ValueNotifier<int>(5);
       final ValueNotifier<int> secondNotifier = ValueNotifier<int>(10);
       final ComputedNotifier<String> computedNotifier =
@@ -732,7 +732,7 @@ void main() {
       expect(listenerCallCount, 1);
     });
 
-    test('with multiple listenables', () {
+    test('with multiple listenable', () {
       final ValueNotifier<String> notifier1 = ValueNotifier<String>('Hello');
       final ValueNotifier<String> notifier2 = ValueNotifier<String>(' ');
       final ValueNotifier<String> notifier3 = ValueNotifier<String>('world!');
